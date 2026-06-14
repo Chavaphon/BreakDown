@@ -67,28 +67,6 @@ graph = builder.compile()
 
 app = FastAPI()
 
-class Input(BaseModel):
-    field: str
-    task: str
-
-@app.post("/breakdown")
-async def chat_endpoint(input_data: Input):
-    # Pass the user input into your LangGraph state structure
-    initial_state = {"messages": [("user", input_data.message)]}
-    
-    # Run your graph
-    response = await graph.invoke(initial_state)
-    
-    # Return the final message from the graph state
-    return {"response": response["messages"][-1].content}
-
-app = FastAPI(
-    title="AI Agent API",
-    description="LangGraph Agent exposed via FastAPI",
-    version="1.0",
-)
-
-
 @app.post("/run-agent", response_model=AgentResponse)
 async def run_agent(request: AgentRequest):
 
