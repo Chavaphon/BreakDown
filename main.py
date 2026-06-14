@@ -7,6 +7,7 @@ from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, START, END
 from pydantic import BaseModel, Field
+from fastapi import FastAPI
 
 load_dotenv()
 
@@ -16,6 +17,14 @@ class State(TypedDict):
     steps: List[str]
 
 class Step(BaseModel):
+    steps: List[str]
+
+class AgentRequest(BaseModel):
+    field: str = Field(description="The field of interest")
+    task: str = Field(description="The task to accomplish")
+
+
+class AgentResponse(BaseModel):
     steps: List[str]
 
 #---Nodes-----------------------------------------------------------------------------------------------------------------------------------
@@ -43,7 +52,7 @@ def give_steps(State) -> dict:
 
     return {'steps' : response.steps}
 
-#---Start-----------------------------------------------------------------------------------------------------------------------------------
+#---Graph-----------------------------------------------------------------------------------------------------------------------------------
 
 builder = StateGraph(State)
 
@@ -54,9 +63,40 @@ builder.add_edge('give_steps', END)
 
 graph = builder.compile()
 
-field = input('What is your field of interest?')
-task = input('What is your task?')
+#---FastAPI-----------------------------------------------------------------------------------------------------------------------------------
 
-respond = graph.invoke({'field' : field, 'task': task})
+app = FastAPI()
 
-print(respond)
+class Input(BaseModel):
+    field: str
+    task: str
+
+@app.post("/breakdown")
+async def chat_endpoint(input_data: Input):
+    # Pass the user input into your LangGraph state structure
+    initial_state = {"messages": [("user", input_data.message)]}
+    
+    # Run your graph
+    response = await graph.invoke(initial_state)
+    
+    # Return the final message from the graph state
+    return {"response": response["messages"][-1].content}
+
+app = FastAPI(
+    title="AI Agent API",
+    description="LangGraph Agent exposed via FastAPI",
+    version="1.0",
+)
+
+
+@app.post("/run-agent", response_model=AgentResponse)
+async def run_agent(request: AgentRequest):
+
+    result = graph.invoke({"field": request.field, "task": request.task})
+    return {"steps": result["steps"]}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
